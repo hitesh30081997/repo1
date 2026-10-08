@@ -57,6 +57,27 @@ def _unfreeze(self, *args, partial=False, **kwargs):
     self._frozen_by_patch = []
 
 
+# Workaround for a third NeMo bug: the greedy generator now returns a tuple
+# (tokens, samples, confidence, attention), but the SLU SequenceGenerator still
+# expects only the tokens tensor. This wrapper hands back just the tokens.
+class _TokensOnly:
+    def __init__(self, generator):
+        self._generator = generator
+
+    def __call__(self, *args, **kwargs):
+        out = self._generator(*args, **kwargs)
+        if isinstance(out, tuple) and not kwargs.get("return_beam_scores", False):
+            return out[0]
+        return out
+
+    def __getattr__(self, name):
+        return getattr(self._generator, name)
+
+
+if not isinstance(model.sequence_generator.generator, _TokensOnly):
+    model.sequence_generator.generator = _TokensOnly(model.sequence_generator.generator)
+
+
 for _name, _module in model.named_children():
     cls = type(_module)
     if not hasattr(cls, "freeze"):
