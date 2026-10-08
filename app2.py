@@ -22,15 +22,22 @@ model.eval()
 # Workaround for a second NeMo bug: transcribe() calls freeze()/unfreeze() on the
 # model's submodules, but the SLU TransformerDecoder (and possibly others) is a plain
 # torch module without those methods. Give any submodule that lacks them simple versions.
-def _freeze(self):
+def _freeze(self, *args, **kwargs):
+    # Remember which params were trainable so unfreeze(partial=True) can restore them
+    self._frozen_by_patch = [p for p in self.parameters() if p.requires_grad]
     for p in self.parameters():
         p.requires_grad = False
     self.eval()
 
 
-def _unfreeze(self):
-    for p in self.parameters():
+def _unfreeze(self, *args, partial=False, **kwargs):
+    if partial:
+        params = getattr(self, "_frozen_by_patch", [])
+    else:
+        params = list(self.parameters())
+    for p in params:
         p.requires_grad = True
+    self._frozen_by_patch = []
 
 
 for _name, _module in model.named_children():
