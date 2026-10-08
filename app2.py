@@ -19,6 +19,28 @@ model = nemo_asr.models.SLUIntentSlotBPEModel.restore_from(restore_path=MODEL_PA
 model.eval()
 
 
+# Workaround for a second NeMo bug: transcribe() calls freeze()/unfreeze() on the
+# model's submodules, but the SLU TransformerDecoder (and possibly others) is a plain
+# torch module without those methods. Give any submodule that lacks them simple versions.
+def _freeze(self):
+    for p in self.parameters():
+        p.requires_grad = False
+    self.eval()
+
+
+def _unfreeze(self):
+    for p in self.parameters():
+        p.requires_grad = True
+
+
+for _name, _module in model.named_children():
+    cls = type(_module)
+    if not hasattr(cls, "freeze"):
+        cls.freeze = _freeze
+    if not hasattr(cls, "unfreeze"):
+        cls.unfreeze = _unfreeze
+
+
 def predict_intent_and_slots(audio_path):
     if audio_path is None:
         return "Please upload or record an audio file"
@@ -66,4 +88,4 @@ with gr.Blocks(title="Conformer Large SLURP Demo") as demo:
     submit_btn.click(fn=predict_intent_and_slots, inputs=audio_input, outputs=output_text)
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=6000)
+    demo.launch(server_name="0.0.0.0", server_port=7860)
