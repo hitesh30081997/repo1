@@ -1,5 +1,6 @@
 import ast
 import json
+from contextlib import contextmanager
 
 import gradio as gr
 import nemo.collections.asr as nemo_asr
@@ -10,6 +11,22 @@ from nemo.collections.common.parts import MultiLayerPerceptron
 # MultiLayerPerceptron. Making `.mlp` point back to the MLP itself satisfies the lookup.
 if not hasattr(MultiLayerPerceptron, "mlp"):
     MultiLayerPerceptron.mlp = property(lambda self: self)
+
+
+# The generator also uses TokenClassifier's with_log_softmax_enabled() context manager,
+# which temporarily switches log-softmax on or off. Give the MLP the same behavior.
+@contextmanager
+def _with_log_softmax_enabled(self, value=True):
+    previous = getattr(self, "log_softmax", True)
+    self.log_softmax = value
+    try:
+        yield self
+    finally:
+        self.log_softmax = previous
+
+
+if not hasattr(MultiLayerPerceptron, "with_log_softmax_enabled"):
+    MultiLayerPerceptron.with_log_softmax_enabled = _with_log_softmax_enabled
 
 MODEL_PATH = "/home/common/Downloads/nvidia-conformer-large-slurp-other-default-v1/slu_conformer_transformer_large_slurp_1.nemo"
 
